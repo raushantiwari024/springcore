@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:c="http://www.springframework.org/schema/c"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd">
+	
+	<bean class="com.springcore.ci.Addition" name="addition1">
+		<!--
+		 Every value is byDefault String type
+		We can also change Parameter order, it starts with index 0
+		-->
+		
+		<constructor-arg value="12" type="int" index="1" /><!-- We can specify variable type  -->
+		<constructor-arg value="23" index="0"/>
+	</bean>
+
+	
+	<bean class="com.springcore.ci.Certi" name="certi1" p:certificate="Marksheet" />
+	
+	<bean class="com.springcore.ci.Person" name="person1">
+		<!-- Every value is byDefault String type-->
+		<constructor-arg>
+			<value>Raushan</value>
+		</constructor-arg>
+
+		<constructor-arg>
+			<value>1234</value>
+		</constructor-arg>
+	</bean>
+	
+	<bean class="com.springcore.ci.Person" name="person2">
+		<constructor-arg value="Raushan" />
+		<constructor-arg value="12345" />
+	</bean>
+	
+	<bean class="com.springcore.ci.Person" name="person3" c:name="Ujjawal" c:personId="123456"/>
+	
+	<bean class="com.springcore.ci.Person" name="withcerti1">
+		<constructor-arg value="certi" />
+		<constructor-arg value="1111"/>
+		<constructor-arg ref="certi1"/>
+	</bean>
+	
+	<bean class="com.springcore.ci.Person" name="withcerti2" c:name="c schema" c:personId="2222" c:certi-ref="certi1"/>
+	
+	
+	
+</beans>
