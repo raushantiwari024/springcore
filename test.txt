@@ -1,1 +1,596 @@
-test
+[HttpPost]
+public IActionResult SubmitAcknowledgeForm([FromBody] List<AcknowledgementForm> model)
+{
+    var lockHeader = Request.Headers["X-Lock-Record"].ToString();
+
+    if (model!= null && model.Count == 0)
+    {
+        return Ok(new { status = "error" ,message="model not received"});
+    }
+
+    List<string> ErrorAckNo = new List<string>();
+    foreach(var form in model){
+        int log = _dataLayer.InsertAcknowledgementFormData(CurrentUser.ExamSession, CurrentUser.ExamYear, CurrentUser.SubCentreCode, CurrentUser.UniqueID, form.AckSn, form.AckTxt, form.ItemCount, form.Checkfield, CurrentUser.UniqueID.ToString(), form.AckSnTxt);
+        if (log == 0)
+        {
+            ErrorAckNo.Add(form.AckSnTxt);
+        }
+    }
+
+    if(ErrorAckNo.Count != 0)
+    {
+        return Ok(new { status = "Partial error",message="Some fields are not updated correctly",ErrorAckNo });
+    }
+    else
+    {
+        if(lockHeader == "yes")
+        {
+            Console.WriteLine("Locking the record to prevent further modification");
+            int log = _dataLayer.LockAcknowledgeForSubCenter(CurrentUser.ExamSession,CurrentUser.ExamYear,CurrentUser.SubCentreCode,UniqueId);
+        }
+    }
+
+    return Ok(new {status="success", message = "Acknowledge Recorded successfully"});
+}
+
+
+
+
+
+------------------------------------------------------------------------------------------------------
+namespace ExamCentreMgmt.Models
+{
+    public class AcknowledgementForm
+    {
+        public int AckSn { get; set; }
+        public string AckSnTxt { get; set; }
+        public string AckTxt { get; set; }
+        public int ItemCount { get; set; }
+        public string Checkfield { get; set; }
+    }
+
+}
+
+--------------------------------------------------------------------
+public int InsertAcknowledgementFormData(string ExamSession, int @ExamYear, int subCenterCode, int UniqueId, int ackSNo, string text, int value, string checkfield, string createUser, string AcksNoText)
+{
+    using (SqlCommand cmd = new SqlCommand("InsertAcknowledgementForm", GetConnection(ConnectionString)))
+    {
+        cmd.CommandType = CommandType.StoredProcedure;
+
+        // Add parameters to the command
+        cmd.Parameters.AddWithValue("@SubCenterCode", subCenterCode);
+        cmd.Parameters.AddWithValue("@UniqueId", UniqueId);
+        cmd.Parameters.AddWithValue("@ExamSession", ExamSession);
+        cmd.Parameters.AddWithValue("@ExamYear", @ExamYear);
+        cmd.Parameters.AddWithValue("@AckSNo", ackSNo);
+        cmd.Parameters.AddWithValue("@Text", text);
+        cmd.Parameters.AddWithValue("@Value", value);
+        cmd.Parameters.AddWithValue("@Checkfield", checkfield);
+        cmd.Parameters.AddWithValue("@CreateUser", createUser);
+        cmd.Parameters.AddWithValue("@AcksNoText", AcksNoText);
+        try
+        {
+            return cmd.ExecuteNonQuery();
+        }
+        catch { return 0; }
+
+
+    }
+}
+
+
+ public int LockAcknowledgeForSubCenter(string ExamSession, int ExamYear, int subCenterCode, int UniqueId)
+ {
+     string ProcedureName = "";
+     using(SqlConnection con = new SqlConnection(ConnectionString))
+     {
+         using(SqlCommand command = new SqlCommand(ProcedureName, con))
+         {
+             command.CommandType = CommandType.StoredProcedure;
+
+             command.Parameters.Add("", SqlDbType.VarChar).Value = ExamSession;
+             command.Parameters.Add("", SqlDbType.Int).Value = ExamYear;
+             command.Parameters.Add("", SqlDbType.Int).Value = subCenterCode;
+             command.Parameters.Add("", SqlDbType.Int).Value = UniqueId;
+
+             return command.ExecuteNonQuery();
+
+         }
+     }
+
+     return 0;
+ }
+
+
+
+
+public int DeleteInvigilatorAllocation(string ExamSession, int ExamYear, int subCenterCode, int UniqueId, int SubjectCode, string ExamDate)
+{
+    string ProcedureName = "deleteInvigilatorAllocationDateWiseSubjectWise";
+    using (SqlConnection con = new SqlConnection(ConnectionString))
+    {
+        using (SqlCommand command = new SqlCommand(ProcedureName, con))
+        {
+            command.CommandType = CommandType.StoredProcedure;
+
+            command.Parameters.Add("@ExamSession", SqlDbType.VarChar).Value = ExamSession;
+            command.Parameters.Add("@ExamYear", SqlDbType.Int).Value = ExamYear;
+            command.Parameters.Add("@SubCenterCode", SqlDbType.Int).Value = subCenterCode;
+            command.Parameters.Add("@UniqueId", SqlDbType.Int).Value = UniqueId;
+            command.Parameters.Add("@SubjectCode", SqlDbType.Int).Value = SubjectCode;
+            command.Parameters.AddWithValue("@ExamDate",ExamDate);
+
+            return command.ExecuteNonQuery();
+
+        }
+    }
+
+    return 0;
+}
+
+
+------------------------------------------------------------------------------------------
+CREATE PROCEDURE [dbo].[InsertAcknowledgementForm]      
+ @SubCenterCode INT,    
+ @UniqueId INT,  
+ @ExamSession varchar(10),  
+ @ExamYear int,  
+ @AckSNo INT,      
+ @Text VARCHAR(400),      
+ @Value INT,      
+ @Checkfield VARCHAR(10),      
+ @CreateUser VARCHAR(50),    
+ @AcksNoText varchar(10) ,  
+ @Remark VARCHAR(100)=NULL,      
+ @Remark1 VARCHAR(100)=NULL     
+AS      
+BEGIN      
+    SET NOCOUNT ON;     
+   
+ DECLARE @Count int;      
+     
+ SELECT @Count=COUNT(SubCenterCode) FROM AcknowledgementForm WHERE SubCenterCode = @SubCenterCode AND UniqueID=@UniqueId and ExamSession=@ExamSession and ExamYear=@ExamYear and  AcksNoText=@AcksNoText    
+      
+ IF @Count<>0    
+ BEGIN      
+  -- Perform your action here, for example:      
+  UPDATE AcknowledgementForm      
+  SET [ItemCount] = @Value,      
+  [Checkfield] = @Checkfield,      
+  ModifyUser=@CreateUser,      
+  ModifyDate=GETDATE(),    
+  AcksNoText=@AcksNoText    
+  WHERE [AckSNo]=@AckSNo and AcksNoText=@AcksNoText and SubCenterCode = @SubCenterCode and ExamSession=@ExamSession and ExamYear=@ExamYear;      
+ END      
+ ELSE      
+ BEGIN      
+  INSERT INTO [dbo].[AcknowledgementForm]       
+    ([ExamSession]      
+      ,[ExamYear]      
+      ,[SubCenterCode]   
+   , [UniqueID]  
+      ,[AckSNo]  
+      ,[Text]      
+      ,[ItemCount]      
+      ,[Checkfield]      
+      ,[CreateUser]      
+      ,[CreateDate]    
+   ,[AcksNoText]    
+     )      
+       
+  VALUES (      
+   @ExamSession, @ExamYear, @SubCenterCode, @UniqueId,     
+   @AckSNo,@Text,@Value,@Checkfield,      
+   @CreateUser, GETDATE()  ,@AcksNoText    
+  );      
+ END         
+END
+
+
+CREATE PROCEDURE deleteInvigilatorAllocationDateWiseSubjectWise
+	@ExamSession varchar(20),
+	@ExamYear int,
+	@SubCenterCode int,
+	@UniqueId int,
+	@SubjectCode int,
+	@ExamDate datetime
+AS
+BEGIN
+	DELETE FROM SubCenterWiseRoomDetails
+	WHERE ExamSession=@ExamSession AND ExamYear=@ExamYear 
+	AND SubCenterCode=@SubCenterCode AND UniqueId=@UniqueId 
+	AND DateOfExam=@ExamDate AND SubjectCode=@SubjectCode;
+
+	DELETE FROM SubCenterWiseRoomWiseManPowerDetails
+	WHERE ExamSession=@ExamSession AND ExamYear=@ExamYear 
+	AND SubCenterCode=@SubCenterCode AND UniqueId=@UniqueId 
+	AND DateOfExam=@ExamDate AND SubjectCode=@SubjectCode;
+
+END
+
+
+--------------------------------------------------------------------------------------------------------
+@model System.Data.DataSet;
+@using System.Data;
+@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+    ViewData["Title"] = "Acknowledge Form";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Style {
+    <style>
+        .table-100 {
+            width: 95%;
+        }
+
+        .serial-no {
+            width: 10px;
+        }
+
+        .checkbox-column {
+            width: 20px;
+        }
+
+        input[type="number"] {
+            margin: 0;
+            padding: 0;
+            width: 5rem;
+            border-top: 0;
+            border-left: 0;
+            border-right: 0;
+            margin-bottom: 0;
+            line-height: 10px;
+            border-color: #eb0602;
+        }
+
+        input[type="number"] {
+            text-align: center;
+        }
+
+            input[type="number"][disabled="disabled"] {
+                border-color: white;
+                color: white;
+            }
+
+        input:focus {
+            outline: none;
+        }
+
+        /* Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        label.error {
+            position: relative;
+            padding: 4px 4px;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+            border-radius: 0.25rem;
+            color: #842029;
+            background-color: #f8d7da;
+            border-color: #f5c2c7;
+        }
+
+        input[type="radio"] {
+            transform: scale(1.4);
+        }
+
+            input[type="radio"] + label {
+                margin-left: 8px;
+                font-weight: 600;
+            }
+
+        label[for="Radio*"] {
+            margin-left: 8px;
+            font-weight: 600;
+        }
+
+        table tr > td:nth-child(3) {
+            font-size: 16px;
+            padding: 10px;
+        }
+
+
+        /*  @@media(min - width: 546px)
+                                                                                        {
+                                                                                            table tr>td:nth-child(3)
+                                                                                        {
+                                                                                            font-size: 10px;
+                                                                                            padding: 10px;
+                                                                                        }
+
+                                                                                        } */
+
+
+
+        table tbody tr td {
+            margin: 0;
+            padding: 0;
+            text-align: justify;
+        }
+
+
+        table.acknowledgement tbody:nth-child(3) {
+            width: 80px;
+        }
+
+        table.radiobtn tbody {
+            display: flex;
+            justify-content: space-between;
+            width: 6rem;
+        }
+
+        span[data-val-display="Dynamic"] {
+            color: red;
+        }
+
+    </style>
+}
+
+<div class="container mb-5">
+    <h3 class="text-center text-uppercase">Acknowledgement Form</h3>
+
+    @if (Model != null && Model.Tables.Count > 0 && Model.Tables[0].Rows.Count > 0)
+    {
+        <table class="table table-bordered" id="acknowledge-form-table">
+            <thead>
+                <tr>
+                    <!-- Dynamically create table headers from DataColumn -->
+                    @* @foreach (DataColumn column in Model.Tables[0].Columns)
+                    {
+                        <th>@column.ColumnName</th>
+                    } *@
+                    <th>S. No</th>
+                    <th>Sub Part</th>
+                    <th>Items</th>
+                    <th>Enter Data</th>
+                    <th>Received</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (DataRow row in Model.Tables[0].Rows)
+                {
+                    <tr>
+                        <td>@row["AckSNo"]</td>
+                        <td>@row["AckSnoTxt"]</td>
+                        <td>@row["AckText"]</td>
+                        <td>
+                            @if (new[] { "1", "2", "7", "8", "9", "10", "15" }.Contains(@row["AckSNo"].ToString()))
+                            {
+                                <input type="number" value="@row["ItemCount"]" class="item-count" />
+                            }
+
+                        </td>
+                        <td>
+                            <div class="d-flex">
+                                <span class="d-flex flex-column">
+                                    <input type="radio" value="Yes" name="Received_@row["AckSnoTxt"]" class="form-check-input"
+                                    @(row["Checkfield"].ToString().ToUpper() == "YES" ? "checked" : "") />Yes
+                                </span>
+                                <span class="d-flex flex-column ms-3">
+                                    <input type="radio" value="No" name="Received_@row["AckSnoTxt"]" class="form-check-input"
+                                    @(row["Checkfield"].ToString().ToUpper() == "NO" ? "checked" : "") />No
+                                </span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <div class="d-flex justify-content-center align-items-center">
+            <button type="button" class="btn btn-success" id="acknowledge-submit">Submit</button>
+            <button type="button" class="btn btn-success ms-3" id="preview-and-submit">Preview and Save</button>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal fade" id="acknowledge-preview-model" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-scrollable modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="staticBackdropLabel">Acknowledge Form Preview</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <table id="table-to-preview" class="table table-bordered m-0 p-0 w-100"></table>
+
+                        <p><input type="checkbox" id="accept-to-lock" /> declaration </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Decline</button>
+                        <button type="button" class="btn btn-primary" id="save-acknowledgement-record">Save and Lock</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="position-fixed top-0 end-0 p-3" style="z-index: 11">
+            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" id="toast-notification">
+                <div class="toast-header" id="toast-header">
+                    <span style="width:2px; height:2px;background-color:aqua ; padding:10px"></span>
+                    <strong class="me-auto text-capitalize fw-bolder fs-6 ms-2" id="toast-header-message"></strong> <!-- Updated ID -->
+                    <small>Now</small>
+                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body text-black fw-bold" id="toast-body-msg">
+                    <!-- Body message goes here -->
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <p>No data available.</p>
+    }
+</div>
+@section Scripts {
+    <script>
+        let acknowledgementPrevewPopupModel;
+        function getAcknowledgementPrevewModelInstance(instance) {
+            let modal;
+            if (!instance) {
+                let modalElement = document.getElementById('acknowledge-preview-model');
+                modal = new bootstrap.Modal(modalElement);
+            } else {
+                modal = instance
+            }
+            return modal;
+        }
+
+        function showToast(headerMessage, bodyMessage) {
+            console.log(`headerMessage: ${headerMessage}, bodyMessage: ${bodyMessage}`);
+            document.getElementById('toast-header-message').innerText = headerMessage;
+            document.getElementById('toast-body-msg').innerText = bodyMessage;
+
+            let toastElement = document.getElementById('toast-notification');
+
+            let toast = new bootstrap.Toast(toastElement);
+
+            toast.show();
+        }
+
+        $(document).ready(function(){
+            $('#acknowledge-submit').on('click', handleAcknowledgeForm);
+            $('.item-count').on('input', handleItemCountChange);
+            $('#preview-and-submit').on('click',handleAcknowledgePreview);
+            $('#save-acknowledgement-record').on('click',handleAcknowledgeLock);
+            acknowledgementPrevewPopupModel = getAcknowledgementPrevewModelInstance(acknowledgementPrevewPopupModel);
+
+        })
+
+        function handleAcknowledgeLock(){
+            const payload = getAcknowledgeFormData();
+
+            submitAcknowledgeForm(payload,'yes').then(response=>{
+                showToast(response.status,response.message);
+                if(response.status === 'success'){
+
+                }
+                getAcknowledgementPrevewModelInstance(acknowledgementPrevewPopupModel).hide();
+            }).catch(error=>{
+
+            })
+        }
+
+        function handleAcknowledgePreview(){
+            getAcknowledgementPrevewModelInstance(acknowledgementPrevewPopupModel).show();
+
+            $('#table-to-preview').DataTable({
+                destroy: true,  // Allows re-initialization of the DataTable.
+                data: getAcknowledgeFormData(),  // Data to populate the table.
+                paging: false,  // Disable pagination.
+                ordering: false,  // Disable sorting.
+                info: true,  // Optionally display table info like "Showing 1 to 10 of 100 entries".
+                searching: false,
+                //info: false,
+                columns: [
+                   { data: 'AckSn', title: "AckSn" },
+                   { data: 'AckSnTxt', title: "AckSnTxt" },
+                   {
+                        data:null,title:'Text',className:'w-50',
+                        render: function (data, type, row, meta){
+                            return row.AckTxt;
+                        }
+                   },
+                   { data: 'ItemCount', title: "ItemCount" },
+                   { data: 'Checkfield', title: "Checkfield" }
+                ],
+                columnDefs: [
+                    {
+                        targets: 2,  
+                        width: '50%'
+                    }
+                ]
+            });
+        }
+
+
+        function handleItemCountChange() {
+            let inputValue = $(this).val();
+            let itemCountInput = $(this);
+
+            if (inputValue == ''){
+                 var row = itemCountInput.closest('tr');
+                row.find('input[name^="Received_"][value="No"]').prop('checked', true);
+            }else if(inputValue > 0) {
+                var row = itemCountInput.closest('tr');
+                row.find('input[name^="Received_"][value="Yes"]').prop('checked', true);
+            }
+        }
+
+        function getAcknowledgeFormData(){
+            const payload=[];
+
+            $('#acknowledge-form-table tbody tr').each(function() {
+                let row = $(this);
+
+                let ackSNo = +(row.find('td').eq(0).text()); // AckSNo
+                let ackSnoTxt = row.find('td').eq(1).text(); // AckSnoTxt
+                let ackText = row.find('td').eq(2).text(); // AckText
+                let itemCount = row.find('input[type="number"]').val(); // ItemCount input value
+                if(itemCount === '' || isNaN(itemCount)) itemCount = 0;
+
+                itemCount = +itemCount;
+                let receivedValue = row.find('input[name="Received_' + ackSnoTxt + '"]:checked').val();
+
+                payload.push({
+                    AckSn:ackSNo,
+                    AckSnTxt:ackSnoTxt,
+                    AckTxt:ackText,
+                    ItemCount:itemCount,
+                    Checkfield:receivedValue
+                });
+            });
+            return payload;
+        }
+
+        function handleAcknowledgeForm(event){
+            console.log('Submit clicked..............');
+            const payload=getAcknowledgeFormData();
+            
+            console.log('Payload: ',JSON.stringify(payload) );
+
+            submitAcknowledgeForm(payload,'no')
+            .then(response=>{
+                console.log(`Response: ${JSON.stringify(response)}`);
+                showToast(response.status,response.message);
+                getAcknowledgementPrevewModelInstance(acknowledgementPrevewPopupModel).hide();
+            })
+            .catch(error=>{
+                console.log(`An error occur: ${JSON.stringify(error)}`);
+            })
+        }
+
+        function submitAcknowledgeForm(payload, lockHeaderValue) {
+            return new Promise((resolve, reject) => {
+                $.ajax({
+                    url: '/Home/SubmitAcknowledgeForm',
+                    data: JSON.stringify(payload),
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'X-Lock-Record': lockHeaderValue
+                    },
+                    success: function(response) {
+                        resolve(response);
+                    },
+                    error: function(error) {
+                        reject(error);
+                    }
+                });
+            });
+        }
+
+    </script>
+}
